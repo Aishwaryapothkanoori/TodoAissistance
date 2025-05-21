@@ -26,18 +26,19 @@ app.get("/todos", async (req, res) => {
 
 // POST /todos - Add a new todo
 app.post("/todos", async (req, res) => {
-  const { title } = req.body;
-  if (!title) {
-    return res.status(400).json({ error: "Title is required" });
+  const { text } = req.body; // <-- use text instead of title
+  if (!text) {
+    return res.status(400).json({ error: "Text is required" });
   }
 
-  const { data, error } = await supabase.from("todos").insert([{ title }]).select();
+  const { data, error } = await supabase.from("todos").insert([{ text }]).select();
   if (error) {
     return res.status(500).json({ error: error.message });
   }
 
   res.status(201).json(data[0]);
 });
+
 
 // DELETE /todos/:id - Delete a todo
 app.delete("/todos/:id", async (req, res) => {
@@ -54,28 +55,31 @@ app.delete("/todos/:id", async (req, res) => {
 // POST /summarize - Send a summary message via Slack webhook
 app.post("/summarize", async (req, res) => {
   try {
-    // Fetch all todos
-    const { data, error } = await supabase.from("todos").select("*");
+    const { data: todos, error } = await supabase.from("todos").select("*");
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    const messageText = data.length
-      ? `📝 *Todo Summary:*\n${data.map(todo => `• ${todo.title}`).join("\n")}`
+    const todoListString = todos.length
+      ? todos.map(todo => `• ${todo.text}`).join("\n")
       : "No todos found.";
 
-    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+    // Temporarily bypass OpenAI call
+    const summaryText = todoListString;
 
+    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
     if (webhookUrl) {
-      await axios.post(webhookUrl, { text: messageText });
+      await axios.post(webhookUrl, { text: `📝 *Todo Summary:*\n${summaryText}` });
     }
 
-    res.json({ message: "Summary sent successfully" });
+    res.json({ message: "Summary sent successfully", summary: summaryText });
   } catch (error) {
-    console.error("Error sending summary:", error);
-    res.status(500).json({ error: "Failed to send summary" });
-  }
+  console.error("Error generating summary:", error);
+  res.status(500).json({ error: error.toString() }); // send real error to client
+}
+
 });
+
 
 app.listen(PORT, () => {
   console.log(`✅ Backend server running at http://localhost:${PORT}`);
